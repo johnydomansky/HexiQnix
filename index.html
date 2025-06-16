@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="HexiQnix is a powerful, browser-based SVG to XML converter with features like custom renaming, fill/stroke editing, live preview, and icon saving. Designed for CMS workflows and large-scale icon management." />
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" type="image/svg+xml" href="favicon/q-logo.svg">
+    <link rel="shortcut icon" href="favicon/q-logo.ico" type="image/x-icon">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon/q-logo_16.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon/q-logo_32.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="favicon/q-logo_180.png">
+    <link rel="manifest" href="favicon/site.webmanifest">
+    <title>HexiQnix - SVG Icon Converter</title>
+</head>
+<body>
+    <main class="wrapper">
+      <section>
+        <h1 style="font-size: 2rem;">HexiQnix</h1>
+        <span id="description">A lightweight SVG editor and converter that gives you clean XML output instantly.</span>
+        <p>Paste your SVG code below, choose a name for the icon (optional), and update its appearance.</p>
+        <!-- Option 2: Upload SVG File -->
+        <label for="svgFileInput" class="upload-button-label">Upload SVG</label>
+        <input type="file" id="svgFileInput" accept=".svg" onchange="handleFileUpload(event)" class="upload-button" />
+        <!-- Option 1: Paste SVG Code -->
+        <textarea id="svgInput" placeholder="Paste SVG code here..."></textarea>
+        <input type="text" id="iconName" placeholder="Enter icon name (optional)" />
+      </section>
+        <section class="control-panel">
+          <label for="enableFill" class="switch">
+            <input type="checkbox" id="enableFill" aria-label="Enable Fill Color" onclick="toggleInputState('enableFill', 'fillColor', 'resetFillBtn')" />
+            <span class="slider round"></span>
+          </label>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <label for="fillColor" style="font-weight: bold;">Enable Fill:</label>
+            <input type="color" id="fillColor" disabled />
+            <!-- Reset button for fill color -->
+            <button type="button" id="resetFillBtn" onclick="resetFillColor()" class="reset-btn" style="display: none;">
+              &#x21bb;
+            </button>
+          </div>
+        </section>
+        <section class="control-panel">
+          <label for="enableStroke" class="switch">
+            <input type="checkbox" id="enableStroke" aria-label="Enable Stroke Color" onclick="toggleInputState('enableStroke', 'strokeColor', 'resetStrokeBtn')" />
+            <span class="slider round"></span>
+          </label>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <label for="strokeColor" style="font-weight: bold;">Enable Stroke:</label>
+            <input type="color" id="strokeColor" disabled />
+            <!-- Reset button for stroke color -->
+            <button type="button" id="resetStrokeBtn" onclick="resetStrokeColor()" class="reset-btn" style="display: none;">
+              &#x21bb;
+            </button>
+          </div>
+        </section>
+        <section class="settings-accordion">
+          <div class="accordion-item">
+              <div class="accordion-header" onclick="toggleAccordion('path-settings')">
+                  <h2>Advanced Path Settings</h2>
+                  <span class="accordion-toggle-icon">+</span>
+              </div>
+              <div id="path-settings" class="accordion-content">
+                  <!-- First Row: fill-rule and clip-rule settings with toggle switches -->
+                  <div class="settings-row">
+                      <!-- Fill Rule Enable Toggle -->
+                      <label for="enableFillRule" class="switch">
+                          <input type="checkbox" id="enableFillRule" class="toggle-switch" onclick="toggleInputState('enableFillRule', 'fillRuleValue')">
+                          <span class="slider round"></span>
+                      </label>
+                      <span for="fillRuleValue">Fill Rule:</span>
+                      <input type="text" id="fillRuleValue" value="evenodd" disabled placeholder="Enter value (e.g., 'evenodd')">
+                      <!-- Clip Rule Enable Toggle -->
+                      <label for="enableClipRule" class="switch">
+                          <input type="checkbox" id="enableClipRule" class="toggle-switch" onclick="toggleInputState('enableClipRule', 'clipRuleValue')">
+                          <span class="slider round"></span>
+                      </label>
+                      <span for="clipRuleValue">Clip Rule:</span>
+                      <input type="text" id="clipRuleValue" value="evenodd" disabled placeholder="Enter value (e.g., 'evenodd')">
+                  </div>
+                  <div class="settings-row">
+                      <label for="forceDeleteDefs" class="switch">
+                          <input type="checkbox" id="forceDeleteDefs" class="toggle-switch">
+                          <span class="slider round"></span>
+                      </label>
+                      <span for="forceDeleteDefs">Force Delete <code>defs</code>:</span>
+                      <label for="enableDefs" class="switch">
+                          <input type="checkbox" id="enableDefs" class="toggle-switch">
+                          <span class="slider round"></span>
+                      </label>
+                      <span for="enableDefs">Enable <code>defs</code>:</span>
+                  </div>
+              </div>
+          </div>
+        </section>
+        <section>
+        <button onclick="convertSVG()">Convert</button>
+        <h2>Converted Code:</h2>
+        <pre id="output"></pre>
+        <div class="buttons-area">
+          <button id="copyButton" onclick="copyCode()" style="display: none;">Copy Code</button>
+          <button id="saveButton" onclick="saveIcon()" style="display: none;">Save Icon</button>
+        </div>
+        <h2>Preview:</h2>
+        <div id="svgPreview"></div>
+        <div class="color-swatch-container">
+          <div class="color-swatch" style="background-color: #4CAF50;" onclick="changePreviewBackgroundColor('#4CAF50')"></div>
+          <div class="color-swatch" style="background-color: #000000;" onclick="changePreviewBackgroundColor('#000000')"></div>
+          <div class="color-swatch" style="background-color: #FFFFFF;" onclick="changePreviewBackgroundColor('#FFFFFF')"></div>
+          <span style="font-size: 14px; font-weight: bold;">Choose Preview Background Color</span>
+        </div>
+        <!-- Grid to display saved icons -->
+        <div id="savedIconsGrid" class="grid-container"></div>
+      </section>
+    </main>
+    <script src="script.js"></script>
+</body>
+</html>

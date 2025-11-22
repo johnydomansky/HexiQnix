@@ -24,16 +24,26 @@ const elements = {
     errorMessage: document.getElementById("error-message"),
     svgFileInput: document.getElementById("svgFileInput"),
     savedIconsGrid: document.getElementById("savedIconsGrid"),
+    rotationDial: document.getElementById("rotation-dial"),
+    rotationAngle: document.getElementById("rotation-angle"),
+    scaleWidth: document.getElementById("scale-width"),
+    scaleHeight: document.getElementById("scale-height"),
+    aspectRatioLock: document.getElementById("aspect-ratio-lock"),
+    resetDimensionsBtn: document.getElementById("reset-dimensions-btn"),
+    customColorInput: document.getElementById("customColorInput"),
 };
 
 let parsedSVGDoc = null;
 let savedIcons = [];
 let currentBackgroundColor = "#4CAF50";
+let originalWidth = 0;
+let originalHeight = 0;
+let originalAspectRatio = 1;
 
 const $ = (id) => document.getElementById(id);
 
 // ==========================
-// 2. Utility Functions (helpers used throughout)
+// 2. Utility Functions
 // ==========================
 
 function sanitizeIconName(name) {
@@ -75,7 +85,7 @@ function isValidSVG(svgCode) {
 }
 
 function updateElementStyles(element, options) {
-    const { fillColor, strokeColor, enableFill, enableStroke, enableFillRule, enableClipRule, fillRule, clipRule } = options;
+    const { fillColor, strokeColor, enableFill, enableStroke, enableFillRule, enableClipRule, fillRule, clipRule, applyRootFillNoneToChildren } = options;
 
     const originalFill = element.getAttribute("fill");
     const originalStroke = element.getAttribute("stroke");
@@ -88,6 +98,8 @@ function updateElementStyles(element, options) {
 
     if (enableFill) {
         element.setAttribute("fill", fillColor || "none");
+    } else if (applyRootFillNoneToChildren) {
+        element.setAttribute("fill", "none");
     } else if (!originalFill) {
         element.removeAttribute("fill");
     }
@@ -126,6 +138,11 @@ function setSVGDimensions(svgElement) {
                 svgElement.setAttribute('height', height);
             }
         }
+    }
+    originalWidth = width;
+    originalHeight = height;
+    if (height > 0) {
+        originalAspectRatio = width / height;
     }
 }
 
@@ -223,14 +240,51 @@ function toggleInputState(checkboxId, inputId, extraElementId = null) {
     if (extraElement) {
         extraElement.style.display = isEnabled ? "inline-block" : "none";
     }
+    applySettings();
 }
 
 // ==========================
 // 4. SVG Processing Functions
 // ==========================
 
-function convertSVG() {
-    const svgInput = elements.svgInput.value.trim();
+function parseSVG() {
+    let svgInput = elements.svgInput.value.trim();
+    if (!svgInput) {
+        elements.svgPreview.innerHTML = "";
+        parsedSVGDoc = null;
+        updateOutput(null);
+        return;
+    }
+
+    if (!svgInput.includes('xmlns="http://www.w3.org/2000/svg"')) {
+        svgInput = svgInput.replace(/<svg/g, '<svg xmlns="http://www.w3.org/2000/svg"');
+    }
+
+    try {
+        const parser = new DOMParser();
+        const svgDoc = parser.parseFromString(svgInput, "image/svg+xml");
+        const svgElement = svgDoc.querySelector("svg");
+
+        if (!svgElement) throw new Error("SVG root element <svg> not found.");
+
+        parsedSVGDoc = svgDoc;
+        setSVGDimensions(svgElement);
+        elements.scaleWidth.value = originalWidth;
+        elements.scaleHeight.value = originalHeight;
+
+        applySettings();
+    } catch (error) {
+        elements.output.innerText = `Error: ${error.message}`;
+        elements.svgPreview.innerHTML = '';
+        parsedSVGDoc = null;
+    }
+}
+
+function applySettings() {
+    if (!parsedSVGDoc) return;
+
+    const svgElement = parsedSVGDoc.documentElement.cloneNode(true);
+
     const iconNameInput = elements.iconName.value.trim();
     const enableFill = elements.enableFill.checked;
     const enableStroke = elements.enableStroke.checked;
@@ -243,86 +297,80 @@ function convertSVG() {
     const enableDefs = elements.enableDefs.checked;
     const forceDeleteDefs = elements.forceDeleteDefs.checked;
 
-    elements.svgPreview.innerHTML = '';
-    elements.output.innerText = '';
-
-    if (!svgInput) {
-        elements.output.innerText = "Error: Please provide an SVG code.";
-        parsedSVGDoc = null;
-        return;
+    const applyRootFillNoneToChildren = svgElement.getAttribute("fill") === "none" && !enableFill;
+    if (applyRootFillNoneToChildren) {
+        svgElement.removeAttribute("fill");
     }
 
-    try {
-        const parser = new DOMParser();
-        const svgDoc = parser.parseFromString(svgInput, "image/svg+xml");
-        const svgElement = svgDoc.querySelector("svg");
+    let newWidth = elements.scaleWidth.value;
+    let newHeight = elements.scaleHeight.value;
 
-        if (!svgElement) throw new Error("SVG root element <svg> not found.");
+    if (newWidth < 1) newWidth = 1;
+    if (newHeight < 1) newHeight = 1;
 
-        parsedSVGDoc = svgDoc;
+    elements.scaleWidth.value = newWidth;
+    elements.scaleHeight.value = newHeight;
 
-        setSVGDimensions(svgElement);
+    svgElement.setAttribute('width', newWidth);
+    svgElement.setAttribute('height', newHeight);
 
-        if (forceDeleteDefs) {
-            const defs = svgElement.querySelector("defs");
-            if (defs) {
-                while (defs.firstChild) svgElement.appendChild(defs.firstChild);
-                svgElement.removeChild(defs);
-            }
+    if (forceDeleteDefs) {
+        const defs = svgElement.querySelector("defs");
+        if (defs) {
+            while (defs.firstChild) svgElement.appendChild(defs.firstChild);
+            svgElement.removeChild(defs);
         }
+    }
 
-        if (!svgElement.querySelector("path, rect, circle, ellipse, polygon, polyline, line, image")) {
-            throw new Error("SVG contains no recognizable graphical elements (like <path> or <image>).");
-        }
+    if (!svgElement.querySelector("path, rect, circle, ellipse, polygon, polyline, line, image")) {
+        throw new Error("SVG contains no recognizable graphical elements (like <path> or <image>).");
+    }
 
-        const width = svgElement.getAttribute("width") || "unknown";
-        const height = svgElement.getAttribute("height") || "unknown";
-        const viewBox = svgElement.getAttribute("viewBox") || `0 0 ${width} ${height}`;
+    const safeIconName = sanitizeIconName(iconNameInput) || "default-icon";
 
-        const safeIconName = sanitizeIconName(iconNameInput) || "default-icon";
+    let groupElement = svgElement.querySelector("g[id]");
+    if (groupElement) {
+        groupElement.setAttribute("id", `iconSprite_${safeIconName}`);
+    } else {
+        groupElement = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        groupElement.setAttribute("id", `iconSprite_${safeIconName}`);
+        while (svgElement.firstChild) groupElement.appendChild(svgElement.firstChild);
+        svgElement.appendChild(groupElement);
+    }
 
-        let groupElement = svgElement.querySelector("g[id]");
-        if (groupElement) {
-            groupElement.setAttribute("id", `iconSprite_${safeIconName}`);
-        } else {
-            groupElement = document.createElementNS("http://www.w3.org/2000/svg", "g");
-            groupElement.setAttribute("id", `iconSprite_${safeIconName}`);
-            while (svgElement.firstChild) groupElement.appendChild(svgElement.firstChild);
-            svgElement.appendChild(groupElement);
-        }
-
-        const allElements = groupElement.querySelectorAll("path, circle, rect, ellipse, polyline, line");
-        allElements.forEach(element => {
-            updateElementStyles(element, {
-                fillColor,
-                strokeColor,
-                enableFill,
-                enableStroke,
-                enableFillRule,
-                enableClipRule,
-                fillRule: fillRuleValue,
-                clipRule: clipRuleValue,
-            });
+    const allElements = groupElement.querySelectorAll("path, circle, rect, ellipse, polyline, line");
+    allElements.forEach(element => {
+        updateElementStyles(element, {
+            fillColor,
+            strokeColor,
+            enableFill,
+            enableStroke,
+            enableFillRule,
+            enableClipRule,
+            fillRule: fillRuleValue,
+            clipRule: clipRuleValue,
+            applyRootFillNoneToChildren,
         });
 
-        if (enableDefs) {
-            const defsElement = document.createElementNS("http://www.w3.org/2000/svg", "defs");
-            svgElement.insertBefore(defsElement, groupElement);
-            defsElement.appendChild(groupElement);
-        }
+        const customCssRules = document.querySelectorAll(".custom-css-rule");
+        customCssRules.forEach(rule => {
+            const property = rule.querySelector("input[placeholder='Property']").value;
+            const value = rule.querySelector("input[placeholder='Value']").value;
+            if (property && value) {
+                element.style[property] = value;
+            }
+        });
+    });
 
-        const serializer = new XMLSerializer();
-        let cleanedSVG = serializer.serializeToString(svgElement);
-        cleanedSVG = cleanedSVG.replace(/>\s+</g, "><").replace(/\s{2,}/g, " ");
-        const convertedCode = `${safeIconName}/${viewBox}:${cleanedSVG}`;
-        elements.output.innerText = convertedCode;
-
-        updateSVGPreview(svgElement);
-    } catch (error) {
-        elements.output.innerText = `Error: ${error.message}`;
-        elements.svgPreview.innerHTML = '';
-        parsedSVGDoc = null;
+    if (enableDefs) {
+        const defsElement = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+        svgElement.insertBefore(defsElement, groupElement);
+        defsElement.appendChild(groupElement);
     }
+
+    transformManager.apply(svgElement);
+    updateOutput(svgElement);
+    updateSVGPreview(svgElement);
 }
 
 function updateSVGPreview(svgElement) {
@@ -336,7 +384,7 @@ function updateSVGPreview(svgElement) {
 
     const svgClone = svgElement.cloneNode(true);
     previewContainer.appendChild(svgClone);
-    previewContainer.style.padding = "20px";
+    previewContainer.style.padding = "0";
 }
 
 function resetPreviewIfNoSVG() {
@@ -358,7 +406,7 @@ function resetFillColor() {
         }
     });
     document.getElementById("fillColor").value = "#000000";
-    updateOutput();
+    applySettings();
 }
 
 function resetStrokeColor() {
@@ -370,7 +418,7 @@ function resetStrokeColor() {
         }
     });
     document.getElementById("strokeColor").value = "#000000";
-    updateOutput();
+    applySettings();
 }
 
 function updateSVGColors(fillColor, strokeColor) {
@@ -386,13 +434,26 @@ function updateSVGColors(fillColor, strokeColor) {
     });
 }
 
-function updateOutput() {
-    const serializer = new XMLSerializer();
-    const svgElement = originalAttributes[0]?.element.closest("svg");
+function updateOutput(svgElement) {
+    const output = elements.output;
+    const copyButton = elements.copyButton;
+    const saveButton = elements.saveButton;
+
     if (svgElement) {
-        let cleanedSVG = serializer.serializeToString(svgElement);
+        const serializer = new XMLSerializer();
+        const svgClone = svgElement.cloneNode(true);
+        svgClone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+        let cleanedSVG = serializer.serializeToString(svgClone);
         cleanedSVG = cleanedSVG.replace(/>\s+</g, "><").replace(/\s{2,}/g, " ");
-        document.getElementById("output").innerText = cleanedSVG;
+        const iconName = elements.iconName.value.trim() || "default-icon";
+        const viewBox = svgElement.getAttribute("viewBox") || "0 0 24 24";
+        output.innerText = `${iconName}/${viewBox}:${cleanedSVG}`;
+        copyButton.style.display = "inline-block";
+        saveButton.style.display = "inline-block";
+    } else {
+        output.innerText = "";
+        copyButton.style.display = "none";
+        saveButton.style.display = "none";
     }
 }
 
@@ -416,33 +477,14 @@ function saveIcon() {
         return;
     }
 
-    let metaInfo = "";
-    let svgCode = "";
-
-    if (parsedSVGDoc) {
-        const svgElement = parsedSVGDoc.querySelector("svg");
-        if (!svgElement) {
-            showCustomNotification("Error: Cached SVG is invalid.", "error");
-            return;
-        }
-        const serializer = new XMLSerializer();
-        svgCode = serializer.serializeToString(svgElement);
-    } else {
-        const svgStartIndex = rawOutput.indexOf("<svg");
-        if (svgStartIndex === -1) {
-            showCustomNotification("Error: SVG code not found in output.", "error");
-            return;
-        }
-        metaInfo = rawOutput.substring(0, svgStartIndex).trim();
-        svgCode = rawOutput.substring(svgStartIndex).trim();
-    }
-
-    const isValidSVG = checkSVGValidity(svgCode);
-
-    if (!isValidSVG) {
-        showCustomNotification("Error: Invalid SVG content.", "error");
+    const previewSgvElement = elements.svgPreview.querySelector("svg");
+    if (!previewSgvElement) {
+        showCustomNotification("Error: Preview SVG not found.", "error");
         return;
     }
+
+    const svgCode = previewSgvElement.outerHTML;
+    const metaInfo = rawOutput.substring(0, rawOutput.indexOf("<svg")).trim();
 
     const savedIcon = {
         name: finalIconName,
@@ -554,53 +596,7 @@ function copyCode() {
 
 function handleFileUpload(event) {
     const file = event.target.files[0];
-
-    if (!file) {
-        hideErrorMessage();
-        return;
-    }
-
-    const fileType = file.type;
-    if (fileType !== "image/svg+xml") {
-        showErrorMessage("Please upload a valid SVG file.");
-        return;
-    }
-
-    hideErrorMessage();
-}
-
-
-// ==========================
-// 8. Event Listeners
-// ==========================
-
-elements.svgInput.addEventListener("input", function () {
-    const svgInputValue = elements.svgInput.value.trim();
-    const hasContent = svgInputValue.length > 0;
-
-    elements.copyButton.style.display = hasContent ? "inline-block" : "none";
-    elements.saveButton.style.display = hasContent ? "inline-block" : "none";
-
-    resetPreviewIfNoSVG();
-
-    if (hasContent) {
-        convertSVG();
-    } else {
-        elements.svgPreview.innerHTML = "";
-        elements.output.textContent = "";
-    }
-});
-
-document.getElementById("svgFileInput").addEventListener("change", function () {
-    const fileInput = this;
-    const file = fileInput.files[0];
     const svgInputField = document.getElementById("svgInput");
-    const output = document.getElementById("output");
-    const svgPreview = document.getElementById("svgPreview");
-
-    svgPreview.innerHTML = "";
-    output.innerText = "";
-    clearErrorState();
 
     if (!file) {
         hideErrorMessage();
@@ -623,10 +619,243 @@ document.getElementById("svgFileInput").addEventListener("change", function () {
         }
 
         svgInputField.value = svgContent;
-
-        const inputEvent = new Event("input");
-        svgInputField.dispatchEvent(inputEvent);
+        parseSVG();
     };
 
     reader.readAsText(file);
-});
+}
+
+
+// ==========================
+// 8. Event Listeners
+// ==========================
+
+function setupEventListeners() {
+    elements.svgInput.addEventListener("input", parseSVG);
+    elements.iconName.addEventListener("input", applySettings);
+    elements.fillColor.addEventListener("input", applySettings);
+    elements.strokeColor.addEventListener("input", applySettings);
+    elements.fillRuleValue.addEventListener("input", applySettings);
+    elements.clipRuleValue.addEventListener("input", applySettings);
+    elements.enableDefs.addEventListener("change", applySettings);
+    elements.forceDeleteDefs.addEventListener("change", applySettings);
+    elements.aspectRatioLock.addEventListener("change", applySettings);
+    elements.svgFileInput.addEventListener("change", handleFileUpload);
+
+    elements.customColorInput.addEventListener("input", (event) => {
+        changePreviewBackgroundColor(event.target.value);
+    });
+
+    elements.scaleWidth.addEventListener('input', (e) => {
+        if (elements.aspectRatioLock.checked) {
+            const newWidth = parseFloat(e.target.value);
+            if (!isNaN(newWidth) && newWidth > 0 && originalAspectRatio > 0) {
+                elements.scaleHeight.value = Math.round(newWidth / originalAspectRatio);
+            }
+        }
+        applySettings();
+    });
+
+    elements.scaleHeight.addEventListener('input', (e) => {
+        if (elements.aspectRatioLock.checked) {
+            const newHeight = parseFloat(e.target.value);
+            if (!isNaN(newHeight) && newHeight > 0) {
+                elements.scaleWidth.value = Math.round(newHeight * originalAspectRatio);
+            }
+        }
+        applySettings();
+    });
+
+    elements.resetDimensionsBtn.addEventListener('click', () => {
+        elements.scaleWidth.value = originalWidth;
+        elements.scaleHeight.value = originalHeight;
+        applySettings();
+    });
+
+    if (elements.rotationDial) {
+        let isDragging = false;
+
+        const handle = elements.rotationDial.querySelector('.dial-handle');
+
+        const updateRotation = (newRotation) => {
+            let angle = newRotation;
+            if (angle < 0) angle = 360 + angle;
+            if (angle >= 360) angle = angle % 360;
+
+            transformManager.setRotation(angle);
+            elements.rotationAngle.value = `${angle}°`;
+
+            const angleRad = (angle - 90) * (Math.PI / 180);
+            const radius = elements.rotationDial.offsetWidth / 2;
+            const handleRadius = handle.offsetWidth / 2;
+            const x = radius + (radius - handleRadius - 2) * Math.cos(angleRad) - handleRadius;
+            const y = radius + (radius - handleRadius - 2) * Math.sin(angleRad) - handleRadius;
+            handle.style.left = `${x}px`;
+            handle.style.top = `${y}px`;
+
+            applySettings();
+        };
+
+        elements.rotationDial.addEventListener("mousedown", (e) => {
+            isDragging = true;
+            elements.rotationDial.style.cursor = 'grabbing';
+        });
+
+        document.addEventListener("mousemove", (e) => {
+            if (isDragging) {
+                const rect = elements.rotationDial.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                const angle = Math.atan2(e.clientY - centerY, e.clientX - centerX) * (180 / Math.PI);
+                updateRotation(Math.round(angle + 90));
+            }
+        });
+
+        document.addEventListener("mouseup", () => {
+            if (isDragging) {
+                isDragging = false;
+                elements.rotationDial.style.cursor = 'pointer';
+            }
+        });
+
+        elements.rotationDial.addEventListener("touchstart", (e) => {
+            isDragging = true;
+            e.preventDefault();
+        });
+
+        document.addEventListener("touchmove", (e) => {
+            if (isDragging) {
+                const rect = elements.rotationDial.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                const touch = e.touches[0];
+                const angle = Math.atan2(touch.clientY - centerY, touch.clientX - centerX) * (180 / Math.PI);
+                updateRotation(Math.round(angle + 90));
+            }
+        });
+
+        document.addEventListener("touchend", () => {
+            if (isDragging) {
+                isDragging = false;
+            }
+        });
+
+        elements.rotationAngle.addEventListener('keydown', (e) => {
+            let angle = parseInt(elements.rotationAngle.value) || 0;
+            if (e.key === 'ArrowUp') {
+                angle++;
+                e.preventDefault();
+            } else if (e.key === 'ArrowDown') {
+                angle--;
+                e.preventDefault();
+            }
+            updateRotation(angle);
+        });
+
+        elements.rotationAngle.addEventListener('input', (e) => {
+            let angle = parseInt(e.target.value) || 0;
+            updateRotation(angle);
+        });
+    }
+
+    const addCssRuleBtn = document.getElementById("add-css-rule-btn");
+    if (addCssRuleBtn) {
+        addCssRuleBtn.addEventListener("click", () => {
+            const container = document.getElementById("custom-css-rules-container");
+            const ruleDiv = document.createElement("div");
+            ruleDiv.classList.add("custom-css-rule");
+
+            const propertyInput = document.createElement("input");
+            propertyInput.type = "text";
+            propertyInput.placeholder = "Property";
+            propertyInput.addEventListener("input", applySettings);
+
+            const valueInput = document.createElement("input");
+            valueInput.type = "text";
+            valueInput.placeholder = "Value";
+            valueInput.addEventListener("input", applySettings);
+
+            const deleteBtn = document.createElement("button");
+            deleteBtn.textContent = "X";
+            deleteBtn.classList.add("delete-rule-btn");
+            deleteBtn.addEventListener("click", () => {
+                ruleDiv.remove();
+                applySettings();
+            });
+
+            ruleDiv.appendChild(propertyInput);
+            ruleDiv.appendChild(valueInput);
+            ruleDiv.appendChild(deleteBtn);
+            container.appendChild(ruleDiv);
+        });
+    }
+}
+
+
+// ==========================
+// 9. Transformation Functions
+// ==========================
+
+const transformManager = (() => {
+    let rotate = 0;
+    let scaleX = 1;
+    let scaleY = 1;
+
+    function applyTransforms(svgElement) {
+        if (!svgElement) return;
+        let transformString = ``;
+        if (rotate !== 0) transformString += `rotate(${rotate}) `;
+        if (scaleX !== 1 || scaleY !== 1) transformString += `scale(${scaleX}, ${scaleY})`;
+
+        if (transformString.trim()) {
+            svgElement.setAttribute("transform", transformString.trim());
+        } else {
+            svgElement.removeAttribute("transform");
+        }
+    }
+
+    return {
+        setRotation(angle) {
+            rotate = angle;
+        },
+        getRotation() {
+            return rotate;
+        },
+        setScale(x, y) {
+            scaleX = x;
+            scaleY = y;
+        },
+        getScale() {
+            return { scaleX, scaleY };
+        },
+        flipX() {
+            scaleX *= -1;
+        },
+        flipY() {
+            scaleY *= -1;
+        },
+        apply(svgElement) {
+            applyTransforms(svgElement);
+        }
+    };
+})();
+
+function flipHorizontal() {
+    if (parsedSVGDoc) {
+        transformManager.flipX();
+        applySettings();
+    }
+}
+
+function flipVertical() {
+    if (parsedSVGDoc) {
+        transformManager.flipY();
+        applySettings();
+    }
+}
+
+// ==========================
+// 10. Initialization
+// ==========================
+
+document.addEventListener("DOMContentLoaded", setupEventListeners);

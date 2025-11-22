@@ -20,7 +20,7 @@
         <span id="description">A lightweight SVG editor and converter that gives you clean XML output instantly.</span>
         <p>Paste your SVG code below, choose a name for the icon (optional), and update its appearance.</p>
         <!-- Option 2: Upload SVG File -->
-        <label for="svgFileInput" class="upload-button-label">Upload SVG</label>
+        <label for="svgFileInput" class="upload-button-label">Import SVG</label>
         <input type="file" id="svgFileInput" accept=".svg" onchange="handleFileUpload(event)" class="upload-button" />
         <!-- Option 1: Paste SVG Code -->
         <textarea id="svgInput" placeholder="Paste SVG code here..."></textarea>
@@ -92,9 +92,50 @@
                   </div>
               </div>
           </div>
+          <div class="accordion-item">
+            <div class="accordion-header" onclick="toggleAccordion('transform-settings')">
+                <h2>Transform</h2>
+                <span class="accordion-toggle-icon">+</span>
+            </div>
+            <div id="transform-settings" class="accordion-content">
+                <div class="settings-row">
+                    <span>Rotate:</span>
+                    <div id="rotation-dial" class="rotation-dial">
+                        <div class="dial-handle"></div>
+                    </div>
+                    <input type="text" id="rotation-angle" value="0°">
+                </div>
+                <div class="settings-row">
+                    <span>Dimensions:</span>
+                    <input type="number" id="scale-width" placeholder="Width" style="margin-right: 10px;">
+                    <span>x</span>
+                    <input type="number" id="scale-height" placeholder="Height">
+                    <button type="button" id="reset-dimensions-btn" class="reset-btn" style="margin-left: 10px;">&#x21bb;</button>
+                    <label for="aspect-ratio-lock" class="switch" style="margin-left: 10px;">
+                        <input type="checkbox" id="aspect-ratio-lock" class="toggle-switch" checked>
+                        <span class="slider round"></span>
+                    </label>
+                    <span>Lock Aspect Ratio</span>
+                </div>
+                <div class="settings-row">
+                    <span>Flip:</span>
+                    <button onclick="flipHorizontal()">Flip Horizontal</button>
+                    <button onclick="flipVertical()">Flip Vertical</button>
+                </div>
+            </div>
+        </div>
+        <div class="accordion-item">
+            <div class="accordion-header" onclick="toggleAccordion('global-css-settings')">
+                <h2>Global CSS</h2>
+                <span class="accordion-toggle-icon">+</span>
+            </div>
+            <div id="global-css-settings" class="accordion-content">
+                <div id="custom-css-rules-container"></div>
+                <button type="button" id="add-css-rule-btn" class="add-rule-btn">+</button>
+            </div>
+        </div>
         </section>
         <section>
-        <button onclick="convertSVG()">Convert</button>
         <h2>Converted Code:</h2>
         <pre id="output"></pre>
         <div class="buttons-area">
@@ -107,6 +148,12 @@
           <div class="color-swatch" style="background-color: #4CAF50;" onclick="changePreviewBackgroundColor('#4CAF50')"></div>
           <div class="color-swatch" style="background-color: #000000;" onclick="changePreviewBackgroundColor('#000000')"></div>
           <div class="color-swatch" style="background-color: #FFFFFF;" onclick="changePreviewBackgroundColor('#FFFFFF')"></div>
+          <div class="color-swatch custom-color-picker-container">
+            <div class="color-swatch custom-color-swatch">
+                <span>+</span>
+            </div>
+            <input type="color" id="customColorInput">
+          </div>
           <span style="font-size: 14px; font-weight: bold;">Choose Preview Background Color</span>
         </div>
         <!-- Grid to display saved icons -->
@@ -114,5 +161,8 @@
       </section>
     </main>
     <script src="script.js"></script>
+    <footer>
+      <p>© HexiQnix – Made with pixels, passion, and perfectly placed parentheses by <a href="http://johnydomansky.com/" target="_blank">Johny Domanský</a></p>
+    </footer>
 </body>
 </html>
